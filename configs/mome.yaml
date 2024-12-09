@@ -1,0 +1,13 @@
+model:
+  clip_path: "./checkpoints/eva_vit_g.pth"
+  dino_path: "./checkpoints/dinov2_vitl14_pretrain.pth"
+  pix_path: "./checkpoints/pix2struct-encoder-base"
+  llm_path: "./checkpoints/vicuna-7b-v1.5"
+  sentencebert_path: "./checkpoints/all-MiniLM-L6-v2"
+  ckpt: "./checkpoints/MoME/MoME_ckpt.pth"
+
+  max_txt_len: 600
+  adapter_llm_finetune: True
+  using_selector: True
+  router_method: "mlp"
+  visual_backbone: "all"

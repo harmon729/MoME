@@ -20,8 +20,6 @@ School of Computer Science and Technology, Harbin Institute of Technology, Shenz
 [[Paper]](https://arxiv.org/abs/2407.12709)
 [[Project Page]](https://www.slywiki.cn/mome/)
 
-:fire: Details will be released. Stay tuned :beers: :+1: 
-
 [![Hits](https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2FJiuTian-VL%2FMoME&count_bg=%2379C83D&title_bg=%23555555&icon=github.svg&icon_color=%23E7E7E7&title=Visitors&edge_flat=false)](https://hits.seeyoufarm.com)
 
 </div>
@@ -32,6 +30,7 @@ School of Computer Science and Technology, Harbin Institute of Technology, Shenz
 ## If you find this work useful for your research, please kindly cite our paper and star our repo.
 
 ## Updates
+- [12/2024] Code and checkpoints are released.
 - [09/2024] [Project page](https://www.slywiki.cn/mome/) released!
 - [09/2024] MoME has been accepted by NeurIPS 2024!
 - [07/2024] [Arxiv paper](https://arxiv.org/abs/2407.12709) released.
@@ -47,6 +46,42 @@ The architecture of the proposed MoME model:
 <div align="center">
 <img src='./assets/MoME-Architecture.jpg' width='100%'>
 </div>
+
+## Installation
+
+### Download
+```bash
+git clone https://github.com/JiuTian-VL/MoME.git
+cd MoME
+```
+
+### Environment
+
+```bash
+conda create -n mome python=3.12
+conda activate mome
+pip install -r requirements.txt
+```
+
+### Checkpoints
+
+Please download all the required checkpoints by running the `download_ckpt.py` script.
+
+```bash
+python download_ckpt.py
+```
+
+The required checkpoints will be downloaded to the `./checkpoints` directory from huggingface.
+
+## Inference and Demo
+
+We provide an inference example in `playground.ipynb`, which includes a minimal example of how to use the MoME model for inference.
+
+A gradio demo used for model testing and router visualization is also provided in `demo_mome.py`. You can start the demo by running the following command:
+
+```bash
+python demo_mome.py
+```
 
 ## Multitasking Benchmark
 
