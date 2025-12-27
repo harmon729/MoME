@@ -12,10 +12,9 @@ from transformers import AutoTokenizer, LlamaForCausalLM, Pix2StructVisionModel
 
 from models.dinov2_models.vision_transformer import vit_large as dino_vit_large
 from models.eva_vit import create_eva_vit_g
-from models.moe_adapters.mole_adapter import (set_moe_mlp_adapter_llama,
-                                              set_router_embedding_mlp)
+from models.moe_adapters.mole_adapter import set_moe_mlp_adapter_llama, set_router_embedding_mlp, set_adapter_llama
 from models.moe_adapters.move_modules import ADT, MoEAggregator
-
+from common.registry import registry
 
 class LayerNorm(nn.LayerNorm):
     """Subclass torch's LayerNorm to handle fp16."""
@@ -36,6 +35,7 @@ def freeze_module(module):
     module.train = disabled_train
 
 
+@registry.register_model("mome_model")
 class MoMEModel(nn.Module):
     """
     MoME model
@@ -51,6 +51,7 @@ class MoMEModel(nn.Module):
         using_ADT (bool): Whether to use a ADT for feature transformation. Default is True.
         router_method (Literal["mlp", "add"]): Method for routing, either "mlp" or "add". Default is "mlp".
         visual_backbone (Literal["clip", "dino", "pix2struct", "all"]): Type of visual backbone to use. Default is "clip".
+        enable_mole (bool): Whether to enable MoLE adapters in LLM. Default is True.
     """
 
     def __init__(
@@ -66,6 +67,7 @@ class MoMEModel(nn.Module):
         using_selector: bool = True,
         router_method: Literal["mlp", "add"] = "mlp",
         visual_backbone: Literal["clip", "dino", "pix2struct", "all"] = "clip",
+        enable_mole: bool = True,
     ):
         super().__init__()
         
@@ -73,6 +75,8 @@ class MoMEModel(nn.Module):
         self.adapter_llm_finetune = adapter_llm_finetune
         self.using_selector = using_selector
         self.visual_backbone = visual_backbone
+        self.boost_lr_scale = 0.2
+
         logging.info(f"visual_backbone: {visual_backbone}")
         logging.info(f"using_selector: {using_selector}")
         
@@ -95,7 +99,7 @@ class MoMEModel(nn.Module):
             freeze_module(self.pix2struct_encoder)
             print('Loading Pix2Struct Done')
         
-        self._init_llm(llm_path, adapter_llm_finetune) 
+        self._init_llm(llm_path, adapter_llm_finetune, enable_mole=enable_mole) 
         
         # Init Sentence Bert
         self.bert_model = SentenceTransformer(sentencebert_path)
@@ -140,7 +144,7 @@ class MoMEModel(nn.Module):
     def device(self):
         return list(self.parameters())[0].device
     
-    def _init_llm(self, llm_path:str, adapter_llm_finetune:bool):
+    def _init_llm(self, llm_path:str, adapter_llm_finetune:bool, enable_mole:bool=True):
         print('Loading Vicuna')
         self.llm_tokenizer = AutoTokenizer.from_pretrained(llm_path, trust_remote_code=True)
         self.llm_model = LlamaForCausalLM.from_pretrained(
@@ -152,8 +156,12 @@ class MoMEModel(nn.Module):
             param.requires_grad = False
         
         if adapter_llm_finetune:
-            logging.info("using adapter 4r llm finetune")
-            set_moe_mlp_adapter_llama(self.llm_model, self.llm_model.config.hidden_size, bottleneck=64, num_adapters=4)
+            if enable_mole:
+                logging.info("using mole adapter for llm finetune")
+                set_moe_mlp_adapter_llama(self.llm_model, self.llm_model.config.hidden_size, bottleneck=64, num_adapters=4)
+            else:
+                logging.info("using normal adapter for llm finetune")
+                set_adapter_llama(self.llm_model, self.llm_model.config.hidden_size, bottleneck=64)
         
         print('Loading Vicuna Done')
 
@@ -366,7 +374,7 @@ class MoMEModel(nn.Module):
         question_embedding = self.bert_model.encode(questions, convert_to_tensor=True, show_progress_bar=False)
         return question_embedding
     
-    def forward(self, samples:dict, reduction="mean"):
+    def forward(self, samples:dict):
         """
         Args:
             samples: Dict
@@ -390,21 +398,38 @@ class MoMEModel(nn.Module):
                 attention_mask=attention_mask,
                 return_dict=True,
                 labels=targets,
-                reduction=reduction,
             )
         
 
         lm_loss = outputs.loss
-        lb_loss = 0
-        
-        if self.adapter_llm_finetune and hasattr(self.llm_model.model.layers[0].mlp.adapter, "lb_loss") and self.lb_rate > 0:
-            lb_losses = []
-            for layer in self.llm_model.model.layers:
-                lb_losses.append(layer.mlp.adapter.lb_loss)
-            lb_loss = sum(lb_losses)/len(lb_losses)
-        
 
-        return {"loss": lm_loss + lb_loss * self.lb_rate, "lm_loss": lm_loss, "lb_loss": lb_loss}
+        return {"loss": lm_loss}
+    
+    def get_optimizer_params(self, weight_decay, lr_scale=1):
+        p_wd, p_non_wd = [], []
+        p_boost, p_boost_non_wd = [], []
+        boost_name = []
+        for n, p in self.named_parameters():
+            if not p.requires_grad:
+                continue  # frozen weights
+            elif "pix_selector" in n or "dino_selector" in n or "vit_selector" in n:
+                if p.ndim < 2 or "bias" in n or "ln" in n or "bn" in n:
+                    p_boost_non_wd.append(p)
+                else:
+                    p_boost.append(p)
+                boost_name.append(n)
+            else:
+                if p.ndim < 2 or "bias" in n or "ln" in n or "bn" in n:
+                    p_non_wd.append(p)
+                else:
+                    p_wd.append(p)
+        optim_params = [
+            {"params": p_wd, "weight_decay": weight_decay, "lr_scale": lr_scale},
+            {"params": p_non_wd, "weight_decay": 0, "lr_scale": lr_scale},
+            {"params": p_boost, "weight_decay": weight_decay, "lr_scale": lr_scale*self.boost_lr_scale},
+            {"params": p_boost_non_wd, "weight_decay": 0, "lr_scale": lr_scale*self.boost_lr_scale},
+        ]
+        return optim_params
     
     @torch.no_grad()
     def generate(
@@ -454,8 +479,9 @@ class MoMEModel(nn.Module):
         return output_text
     
     @classmethod
-    def from_config(cls, cfg_path):
-        cfg = OmegaConf.load(cfg_path).model
+    def from_config(cls, cfg: Union[str, OmegaConf]):
+        if isinstance(cfg, str):
+            cfg = OmegaConf.load(cfg).model
         clip_path = cfg.get("clip_path")
         dino_path = cfg.get("dino_path")
         pix_path = cfg.get("pix_path")
@@ -467,7 +493,7 @@ class MoMEModel(nn.Module):
         using_selector = cfg.get("using_selector", True)
         router_method = cfg.get("router_method", "mlp")
         visual_backbone = cfg.get("visual_backbone", "all")
-        
+        enable_mole = cfg.get("enable_mole", True)
 
         model = cls(
             clip_path=clip_path,
@@ -481,10 +507,30 @@ class MoMEModel(nn.Module):
             using_selector=using_selector,
             router_method=router_method,
             visual_backbone=visual_backbone,
+            enable_mole=enable_mole,
         )
 
         if cfg.get("ckpt") is not None:
-            result = model.load_state_dict(torch.load(cfg.get("ckpt"), map_location="cpu"), strict=False)
+            ckpt_path = cfg.get("ckpt")
+            ckpt = torch.load(cfg.get("ckpt"), map_location="cpu")
+            if "model" in ckpt:
+                ckpt = ckpt["model"]
+                
+            if "stage1" in ckpt_path:
+                print(f"Loading stage1 checkpoint from {ckpt_path} and duplicating weights for MoLE adapters")
+                new_ckpt = {}
+                for k in ckpt.keys():
+                    if ".adapter." in k:
+                        # adapter adapter weights
+                        for idx in range(4):
+                            new_k = k.replace(".adapter.", f".adapter.adapters.{idx}.")
+                            new_ckpt[new_k] = ckpt[k].clone()
+                    else:
+                        new_ckpt[k] = ckpt[k]
+                result = model.load_state_dict(new_ckpt, strict=False)
+            else:
+                print(f"Loading checkpoint from {ckpt_path}")
+                result = model.load_state_dict(ckpt, strict=False)
             print(f"Unexpected keys: {result.unexpected_keys}")
 
         return model

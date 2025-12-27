@@ -1,0 +1,40 @@
+model:
+  clip_path: "./checkpoints/eva_vit_g.pth"
+  dino_path: "./checkpoints/dinov2_vitl14_pretrain.pth"
+  pix_path: "./checkpoints/pix2struct-encoder-base"
+  llm_path: "./checkpoints/vicuna-7b-v1.5"
+  sentencebert_path: "./checkpoints/all-MiniLM-L6-v2"
+
+  max_txt_len: 600
+  adapter_llm_finetune: True
+  using_selector: True
+  router_method: "mlp"
+  visual_backbone: "all"
+  load_pretrained: False
+  enable_mole: False
+
+run:
+  init_lr: 5e-4
+  weight_decay: 0.05
+  max_epoch: 1
+  num_workers: 8
+  warmup_steps: 1000
+  iters_per_epoch: 30000
+  batch_size_train: 64
+  mixed_precision: bf16
+  output_dir: outputs/mome_stage1
+  print_freq: 100
+
+train_datasets:
+  - ann_path: "/path/to/MoME-data-train/General_data.json"
+    vis_root: "/path/to/image_folder"
+    sample_ratio: 1
+  - ann_path: "/path/to/MoME-data-train/REC_data.json"
+    vis_root: "/path/to/image_folder"
+    sample_ratio: 1
+  - ann_path: "/path/to/MoME-data-train/REG_data.json"
+    vis_root: "/path/to/image_folder"
+    sample_ratio: 1
+  - ann_path: "/path/to/MoME-data-train/Doc_data.json"
+    vis_root: "/path/to/image_folder"
+    sample_ratio: 1

@@ -20,8 +20,6 @@ School of Computer Science and Technology, Harbin Institute of Technology, Shenz
 [[Paper]](https://arxiv.org/abs/2407.12709)
 [[Project Page]](https://www.slywiki.cn/mome/)
 
-[![Hits](https://hits.seeyoufarm.com/api/count/incr/badge.svg?url=https%3A%2F%2Fgithub.com%2FJiuTian-VL%2FMoME&count_bg=%2379C83D&title_bg=%23555555&icon=github.svg&icon_color=%23E7E7E7&title=Visitors&edge_flat=false)](https://hits.seeyoufarm.com)
-
 </div>
 <br>
 
@@ -72,6 +70,79 @@ python download_ckpt.py
 ```
 
 The required checkpoints will be downloaded to the `./checkpoints` directory from huggingface.
+
+## Training
+
+We provide a training script and instruction to perform stage 1 and stage 2 training.
+
+### Preparation
+
+- Download dataset from [huggingface](https://huggingface.co/datasets/daybreaksly/MoME-data-train)
+- Download images and organized them in one folder:
+
+Please download the following datasets:
+
+- **Training images**
+  - `coco-2014`
+  - `coco-2017`
+  - `flickr30K`
+  - `gqa`
+  - `iconqa`
+  - `ureader-instruction-1.0`
+
+After downloading, place all these folders under a **single directory**.  
+For example:
+
+```bash
+/path/to/image_folder/
+├── coco/images/train2014/COCO_train2014_*.jpg
+├── coco_2017/train2017/*.jpg
+├── flickr30K/images/flickr30k-images/*.jpg
+├── gqa/images/*.jpg
+├── iconqa/iconqa_data/iconqa/train/choose_txt/**/image.png
+└── ureader-instruction-1.0/images/*.jpg
+
+```
+In config files (e.g. `configs/train_mome_stage1.yaml` and `configs/train_mome_stage2.yaml`), update the `vis_root` path and dataset paths:
+
+```yaml
+train_datasets:
+  - ann_path: "/path/to/MoME-data-train/General_data.json"
+    vis_root: "/path/to/image_folder"
+    sample_ratio: 1
+  - ann_path: "/path/to/MoME-data-train/REC_data.json"
+    vis_root: "/path/to/image_folder"
+    sample_ratio: 1
+  - ann_path: "/path/to/MoME-data-train/REG_data.json"
+    vis_root: "/path/to/image_folder"
+    sample_ratio: 1
+  - ann_path: "/path/to/MoME-data-train/Doc_data.json"
+    vis_root: "/path/to/image_folder"
+    sample_ratio: 1
+```
+
+### Two-stage Training
+
+1. Run multi‑GPU training for stage 1:
+
+```
+cd MoME
+bash scripts/train_stage1.sh
+```
+
+2. Update the checkpoint path of `stage 1` in `configs/train_mome_stage2.yaml`
+
+```yaml
+model:
+  ckpt: "outputs/mome_stage1/your_job_id/checkpoint_0.pth"
+```
+
+3. Run multi‑GPU training for stage 2:
+
+```
+cd MoME
+bash scripts/train_stage2.sh
+```
 
 ## Inference and Demo
 

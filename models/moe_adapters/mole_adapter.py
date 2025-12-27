@@ -146,3 +146,12 @@ def set_router_embedding_mlp(model: nn.Module, router_embedding: torch.Tensor):
             c.router_embedding = router_embedding
         elif len(list(c.children())) != 0:
             set_router_embedding_mlp(c, router_embedding)
+            
+def set_adapter_llama(model: nn.Module, d_model: int, bottleneck: int = 64):
+    for c in model.children():
+        if type(c) == LlamaMLP:
+            c.adapter = Adapter(d_model=d_model, bottleneck=bottleneck)
+            bound_method = forward_mlp_llama.__get__(c, c.__class__)
+            setattr(c, 'forward', bound_method)
+        elif len(list(c.children())) != 0:
+            set_adapter_llama(c, d_model, bottleneck=bottleneck)
