@@ -5,7 +5,7 @@ joblib==1.2.0
 numpy==1.26.4
 omegaconf==2.3.0
 packaging==24.1
-pandas==1.5.3
+pandas==2.1.4
 peft==0.8.2
 Pillow==10.0.0
 pycocoevalcap==1.2
