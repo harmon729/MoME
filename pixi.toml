@@ -9,6 +9,10 @@ version = "0.1.0"
 
 [dependencies]
 python = "3.12.*"
+cuda-nvcc = "12.1.105.*"
+cuda-cudart-dev = "12.1.105.*"
+gcc_linux-64 = "12.*"
+gxx_linux-64 = "12.*"
 
 [pypi-dependencies]
 pandas = "==2.1.4"
