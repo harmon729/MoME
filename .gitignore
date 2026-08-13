@@ -169,3 +169,4 @@ cython_debug/
 !.pixi/config.toml
 
 .torch_extensions_test/
+.torch_extensions_server/
